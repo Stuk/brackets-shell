@@ -205,6 +205,7 @@ Class GetShellWindowFrameClass() {
 // itself when done.
 @interface ClientWindowDelegate : NSObject <NSWindowDelegate> {
   BOOL isReallyClosing;
+  BOOL wasAlreadyZoomed;
   NSString* savedTitle;
   NSView* fullScreenButtonView;
 }
@@ -225,7 +226,8 @@ Class GetShellWindowFrameClass() {
 - (id) init {
   [super init];
   savedTitle = nil;
-  isReallyClosing = false;
+  isReallyClosing = NO;
+  wasAlreadyZoomed = NO;
   return self;
 }
 
@@ -260,19 +262,17 @@ Class GetShellWindowFrameClass() {
 }
 
 - (IBAction)quit:(id)sender {
-  /*
-  if (g_handler.get() && g_handler->GetBrowserId()) {
-    g_handler->SendJSCommand(g_handler->GetBrowser(), FILE_QUIT);
-  } else {
-    [NSApp terminate:nil];
-  }
-  */
   g_handler->DispatchCloseToNextBrowser();
 }
 
 
 - (void)setFullScreenButtonView:(NSView *)view {
     fullScreenButtonView = view;
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(windowWillFakeFullScreen:)
+                                                 name:@"windowWillFakeFullScreen"
+                                               object:nil];
 }
 
 - (void)addCustomDrawHook:(NSView*)contentView
@@ -299,6 +299,13 @@ Class GetShellWindowFrameClass() {
 #ifdef DARK_UI
     savedTitle = [title copy];
 #endif
+}
+
+
+- (void)windowWillFakeFullScreen:(NSNotification *)notification {
+    if ([[notification object] isEqual:[[fullScreenButtonView superview ] window]]) {
+        wasAlreadyZoomed = [[[fullScreenButtonView superview ] window] isZoomed];
+    }
 }
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification {
@@ -339,6 +346,9 @@ Class GetShellWindowFrameClass() {
 
 - (void)windowDidExitFullScreen:(NSNotification *)notification {
     NSWindow* window = [notification object];
+    if (!wasAlreadyZoomed) {
+        [window performZoom:nil];
+    }
     NSView* contentView = [window contentView];
     NSView* themeView = [[window contentView] superview];
 #ifdef DARK_UI

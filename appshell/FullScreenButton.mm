@@ -108,7 +108,12 @@ static const int FULLSCREEN_BUTTON_TAG = 1004;
 - (void)mouseUp:(NSEvent *)theEvent {
     pressedState = NO;
     hoverState = NO;
+    NSWindow* theWindow = [self window];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"windowWillFakeFullScreen" object:theWindow];
     [self updateButtonStates];
+    if (![theWindow isZoomed]) {
+        [theWindow performZoom:nil];
+    }
     [[self window] toggleFullScreen:self];
 }
 

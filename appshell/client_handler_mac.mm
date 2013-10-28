@@ -104,6 +104,7 @@ void ClientHandler::CloseMainWindow() {
   NSWindow* window;
   NSView* fullScreenButtonView;
   BOOL isReallyClosing;
+  BOOL wasAlreadyZoomed;
   NSString* savedTitle;
 }
 - (IBAction)quit:(id)sender;
@@ -182,7 +183,8 @@ Class GetPopuplWindowFrameClass() {
 
 - (id) init {
   [super init];
-  isReallyClosing = false;
+  isReallyClosing = NO;
+  wasAlreadyZoomed = NO;
   savedTitle = nil;
   fullScreenButtonView = nil;
   return self;
@@ -266,6 +268,10 @@ Class GetPopuplWindowFrameClass() {
 
 - (void)setFullScreenButtonView:(NSView *)view {
   fullScreenButtonView = view;
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                        selector:@selector(windowWillFakeFullScreen:)
+                                        name:@"windowWillFakeFullScreen"
+                                        object:nil];
 }
 
 -(void)windowTitleDidChange:(NSString*)title {
@@ -302,7 +308,18 @@ Class GetPopuplWindowFrameClass() {
 #endif
 }
 
+
+- (void)windowWillFakeFullScreen:(NSNotification *)notification {
+    if ([[notification object] isEqual:[[fullScreenButtonView superview ] window]]) {
+        wasAlreadyZoomed = [[[fullScreenButtonView superview ] window] isZoomed];
+    }
+}
+
 - (void)windowDidExitFullScreen:(NSNotification *)notification {
+    if (!wasAlreadyZoomed) {
+        [window performZoom:nil];
+    }
+    
 #ifdef DARK_UI
     NSView* contentView = [window contentView];
     [self addCustomDrawHook: contentView];
