@@ -4,6 +4,7 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#import <objc/objc.h>
 #import <objc/runtime.h>
 #include <sstream>
 #include "cefclient.h"
@@ -31,6 +32,9 @@
 #include "FullScreenViewController.h"
 
 
+#undef CUSTOM_TRAFFIC_LIGHTS
+#undef CUSTOM_FS_BUTTON
+
 // Application startup time
 CFTimeInterval g_appStartupTime;
 
@@ -45,8 +49,6 @@ NSURL* startupUrl = nil;
 // Content area size for newly created windows.
 const int kWindowWidth = 1000;
 const int kWindowHeight = 700;
-const int kMinWindowWidth = 375;
-const int kMinWindowHeight = 200;
 
 
 // Memory AutoRelease pool.
@@ -136,69 +138,6 @@ extern NSMutableArray* pendingOpenFiles;
 - (void)_drawTitleStringIn:(struct CGRect)arg1 withColor:(id)color;
 @end
 
-/**
- * The patched implementation for drawRect that lets us tweak
- * the title bar.
- */
-void ShellWindowFrameDrawRect(id self, SEL _cmd, NSRect rect) {
-    // Clear to 0 alpha
-    [[NSColor clearColor] set];
-    NSRectFill( rect );
-    //Obtain reference to our NSThemeFrame view
-    NSRect windowRect = [self frame];
-    windowRect.origin = NSMakePoint(0,0);
-    //This constant matches the radius for other macosx apps.
-    //For some reason if we use the default value it is double that of safari etc.
-    float cornerRadius = 4.0f;
-    
-    //Clip our title bar render
-    [[NSBezierPath bezierPathWithRoundedRect:windowRect
-                                     xRadius:cornerRadius
-                                     yRadius:cornerRadius] addClip];
-    [[NSBezierPath bezierPathWithRect:rect] addClip];
-    
-    
-    
-    NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
-    NSColor *fillColor = [NSColor colorWithColorSpace:sRGB components:fillComp count:4];
-    [fillColor set];
-    NSRectFill( rect );
-    NSColor *activeColor = [NSColor colorWithColorSpace:sRGB components:activeComp count:4];
-    NSColor *inactiveColor = [NSColor colorWithColorSpace:sRGB components:inactiveComp count:4];
-    // Render our title text
-    [self _drawTitleStringIn:[self _titlebarTitleRect]
-                   withColor:[NSApp isActive] ?
-                activeColor : inactiveColor];
-    
-    
-    
-    
-}
-
-
-
-
-/**
- * Create a custom class based on NSThemeFrame called
- * ShellWindowFrame. ShellWindowFrame uses ShellWindowFrameDrawRect()
- * as the implementation for the drawRect selector allowing us
- * to draw the border/title bar the way we see fit.
- */
-Class GetShellWindowFrameClass() {
-    // lazily change the class implementation if
-    // not done so already.
-    static Class k = NULL;
-    if (!k) {
-        // See http://cocoawithlove.com/2010/01/what-is-meta-class-in-objective-c.html
-        Class NSThemeFrame = NSClassFromString(@"NSThemeFrame");
-        k = objc_allocateClassPair(NSThemeFrame, "ShellWindowFrame", 0);
-        Method m0 = class_getInstanceMethod(NSThemeFrame, @selector(drawRect:));
-        class_addMethod(k, @selector(drawRect:),
-                        (IMP)ShellWindowFrameDrawRect, method_getTypeEncoding(m0));
-        objc_registerClassPair(k);
-    }
-    return k;
-}
 
 
 // Receives notifications from controls and the browser window. Will delete
@@ -207,6 +146,8 @@ Class GetShellWindowFrameClass() {
   BOOL isReallyClosing;
   NSString* savedTitle;
   NSView* fullScreenButtonView;
+  NSView* theView;
+  NSWindow* theWindow;
 }
 - (void)setIsReallyClosing;
 - (IBAction)handleMenuAction:(id)sender;
@@ -218,13 +159,17 @@ Class GetShellWindowFrameClass() {
 - (void)notifyDownloadComplete:(id)object;
 - (void)notifyDownloadError:(id)object;
 - (void)setFullScreenButtonView:(NSView*)view;
-- (void)addCustomDrawHook:(NSView*)contentView;
+- (void)addCustomDrawHook;
+- (void)setWindow:(NSWindow*)window;
 @end
 
 @implementation ClientWindowDelegate
 - (id) init {
   [super init];
   savedTitle = nil;
+  fullScreenButtonView = nil;
+  theView = nil;
+  theWindow = nil;
   isReallyClosing = false;
   return self;
 }
@@ -260,13 +205,6 @@ Class GetShellWindowFrameClass() {
 }
 
 - (IBAction)quit:(id)sender {
-  /*
-  if (g_handler.get() && g_handler->GetBrowserId()) {
-    g_handler->SendJSCommand(g_handler->GetBrowser(), FILE_QUIT);
-  } else {
-    [NSApp terminate:nil];
-  }
-  */
   g_handler->DispatchCloseToNextBrowser();
 }
 
@@ -275,11 +213,60 @@ Class GetShellWindowFrameClass() {
     fullScreenButtonView = view;
 }
 
-- (void)addCustomDrawHook:(NSView*)contentView
-{
-    NSView* themeView = [contentView superview];
+/**
+ * The patched implementation for drawRect that lets us tweak
+ * the title bar.
+ */
+- (void)drawRect:(NSRect)rect {
+
+  //  [self drawRectOriginal:rect];
+
+    // Clear to 0 alpha
+    [[NSColor clearColor] set];
+    NSRectFill( rect );
+    //Obtain reference to our NSThemeFrame view
+    NSRect windowRect = [theWindow frame];
+    windowRect.origin = NSMakePoint(0,0);
+    //This constant matches the radius for other macosx apps.
+    //For some reason if we use the default value it is double that of safari etc.
+    float cornerRadius = 4.0f;
     
-    object_setClass(themeView, GetShellWindowFrameClass());
+    //Clip our title bar render
+    [[NSBezierPath bezierPathWithRoundedRect:windowRect
+                                     xRadius:cornerRadius
+                                     yRadius:cornerRadius] addClip];
+    [[NSBezierPath bezierPathWithRect:rect] addClip];
+    
+    
+    
+    NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
+    NSColor *fillColor = [NSColor colorWithColorSpace:sRGB components:fillComp count:4];
+    [fillColor set];
+    NSRectFill( rect );
+#if 0
+    NSColor *activeColor = [NSColor colorWithColorSpace:sRGB components:activeComp count:4];
+    NSColor *inactiveColor = [NSColor colorWithColorSpace:sRGB components:inactiveComp count:4];
+
+    // Render our title text
+    [theView _drawTitleStringIn:[theView _titlebarTitleRect]
+                   withColor:[NSApp isActive] ?
+                activeColor : inactiveColor];
+    
+#endif
+}
+
+- (void)addCustomDrawHook{
+
+    NSView* themeView = [[theWindow contentView] superview];
+
+    id c = [themeView class];
+    // Add our drawRect: to the frame class
+    Method m0 = class_getInstanceMethod([self class], @selector(drawRect:));
+    class_addMethod(c, @selector(drawRectOriginal:), method_getImplementation(m0), method_getTypeEncoding(m0));
+    // Exchange methods
+    Method m1 = class_getInstanceMethod(c, @selector(drawRect:));
+    Method m2 = class_getInstanceMethod(c, @selector(drawRectOriginal:));
+    method_exchangeImplementations(m1, m2);
     
 #ifdef LIGHT_CAPTION_TEXT
     // Reset our frame view text cell background style
@@ -288,11 +275,8 @@ Class GetShellWindowFrameClass() {
 #endif
 }
 
-- (void)removeCustomDrawHook:(NSView*)contentView
-{
-    NSView* themeView = [contentView superview];
-    
-    object_setClass(themeView, NULL);
+- (void)setWindow:(NSWindow*)window{
+    theWindow = window;
 }
 
 -(void)windowTitleDidChange:(NSString*)title {
@@ -305,7 +289,7 @@ Class GetShellWindowFrameClass() {
 #ifdef DARK_UI
     NSWindow* window = [notification object];
     savedTitle = [[window title] copy];
-    [window setTitle:@""];
+//    [window setTitle:@""];
 #endif
 }
 
@@ -342,7 +326,7 @@ Class GetShellWindowFrameClass() {
     NSView* contentView = [window contentView];
     NSView* themeView = [[window contentView] superview];
 #ifdef DARK_UI
-    [self addCustomDrawHook: contentView];
+//    [self addCustomDrawHook: contentView];
     [window setTitle:savedTitle];
     [savedTitle release];
     [themeView setNeedsDisplay:YES];
@@ -376,7 +360,7 @@ Class GetShellWindowFrameClass() {
     }
 #endif
     
-#ifdef DARK_UI
+#ifdef CUSTOM_FS_BUTTON
     if ([self isFullScreenSupported]) {
         windowButton = [theWin standardWindowButton:NSWindowFullScreenButton];
         [windowButton setHidden:YES];
@@ -495,7 +479,6 @@ Class GetShellWindowFrameClass() {
 // Receives notifications from the application. Will delete itself when done.
 @interface ClientAppDelegate : NSObject
 - (void)createApp:(id)object;
-- (void)addCustomDrawHook:(NSView*)contentView;
 - (BOOL)application:(NSApplication *)theApplication openFile:(NSString *)filename;
 - (BOOL)application:(NSApplication *)theApplication openFiles:(NSArray *)filenames;
 @end
@@ -564,6 +547,8 @@ Class GetShellWindowFrameClass() {
   NSWindow* theWin = mainWnd;
   NSButton *windowButton;
     
+  [delegate setWindow:mainWnd];
+    
 #ifdef CUSTOM_TRAFFIC_LIGHTS
   //hide buttons
   windowButton = [theWin standardWindowButton:NSWindowCloseButton];
@@ -575,15 +560,17 @@ Class GetShellWindowFrameClass() {
 #endif
 
     
-    
+#ifdef DARK_UI
   NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
   float fillComp[4] = {0.23137255f, 0.24705882f, 0.25490196f, 1.0};
   // Background fill, solid for now.
   NSColor *fillColor = [NSColor colorWithColorSpace:sRGB components:fillComp count:4];
-  [mainWnd setMinSize:NSMakeSize(kMinWindowWidth, kMinWindowHeight)];
   [mainWnd setBackgroundColor:fillColor];
-    
-  // "Preclude the window controller from changing a window’s position from the
+#endif 
+
+  [mainWnd setMinSize:NSMakeSize(kMinWindowWidth, kMinWindowHeight)];
+   
+    // "Preclude the window controller from changing a window’s position from the
   // one saved in the defaults system" (NSWindow Class Reference)
   [[mainWnd windowController] setShouldCascadeWindows: NO];
   
@@ -611,7 +598,9 @@ Class GetShellWindowFrameClass() {
   NSView* contentView = [mainWnd contentView];
 #ifdef DARK_UI
   // Register our custom title bar rendering hook.
-  [self addCustomDrawHook:contentView];
+  [delegate addCustomDrawHook];
+#endif
+#ifdef CUSTOM_FS_BUTTON
   windowButton = [theWin standardWindowButton:NSWindowFullScreenButton];
   [windowButton setHidden:YES];
 #endif
@@ -636,15 +625,13 @@ Class GetShellWindowFrameClass() {
 #endif
     
   window_info.SetAsChild(contentView, 0, 0, content_rect.size.width, content_rect.size.height);
-  
-
     
   NSString* str = [[startupUrl absoluteString] stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
   CefBrowserHost::CreateBrowserSync(window_info, g_handler.get(),
                                 [str UTF8String], settings);
  
-    NSView  *themeView = [[mainWnd contentView] superview];
-    NSRect  parentFrame = [themeView frame];
+  NSView  *themeView = [[mainWnd contentView] superview];
+  NSRect  parentFrame = [themeView frame];
 
 #ifdef CUSTOM_TRAFFIC_LIGHTS
   TrafficLightsViewController     *tvController = [[TrafficLightsViewController alloc] init];
@@ -661,7 +648,7 @@ Class GetShellWindowFrameClass() {
 
 #endif 
 
-#ifdef DARK_UI
+#ifdef CUSTOM_FS_BUTTON
     if ([delegate isFullScreenSupported]) {
         FullScreenViewController     *fsController = [[FullScreenViewController alloc] init];
         if ([NSBundle loadNibNamed: @"FullScreen" owner: fsController])
@@ -724,19 +711,6 @@ Class GetShellWindowFrameClass() {
     return NSTerminateNow;
 }
 
-
-- (void)addCustomDrawHook:(NSView*)contentView
-{
-    NSView* themeView = [contentView superview];
-    
-    object_setClass(themeView, GetShellWindowFrameClass());
-
-#ifdef LIGHT_CAPTION_TEXT
-    // Reset our frame view text cell background style
-    NSTextFieldCell * cell = [themeView titleCell];
-    [cell setBackgroundStyle:NSBackgroundStyleLight];
-#endif
-}
 
 - (BOOL)application:(NSApplication *)theApplication openFile:(NSString *)filename {
   if (!pendingOpenFiles) {

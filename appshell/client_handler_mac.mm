@@ -338,7 +338,7 @@ Class GetPopuplWindowFrameClass() {
     }
 #endif
     
-#ifdef DARK_UI
+#ifdef CUSTOM_FS_BUTTON
     if ([self isFullScreenSupported]) {
         windowButton = [theWin standardWindowButton:NSWindowFullScreenButton];
         [windowButton setHidden:YES];
@@ -450,6 +450,16 @@ void ClientHandler::PopupCreated(CefRefPtr<CefBrowser> browser) {
       NSRect    parentFrame = [themeView frame];
       NSButton* windowButton = nil;
       
+#ifdef DARK_UI
+      NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
+      float fillComp[4] = {0.23137255f, 0.24705882f, 0.25490196f, 1.0};
+      // Background fill, solid for now.
+      NSColor *fillColor = [NSColor colorWithColorSpace:sRGB components:fillComp count:4];
+      [theWin setBackgroundColor:fillColor];
+#endif
+      
+      [theWin setMinSize:NSMakeSize(kMinWindowWidth, kMinWindowHeight)];
+      
 #ifdef CUSTOM_TRAFFIC_LIGHTS
       windowButton = [theWin standardWindowButton:NSWindowCloseButton];
       [windowButton setHidden:YES];
@@ -472,7 +482,7 @@ void ClientHandler::PopupCreated(CefRefPtr<CefBrowser> browser) {
       }
 #endif
       
-#ifdef DARK_UI
+#ifdef CUSTOM_FS_BUTTON
       if ([delegate isFullScreenSupported]) {
           windowButton = [theWin standardWindowButton:NSWindowFullScreenButton];
           [windowButton setHidden:YES];

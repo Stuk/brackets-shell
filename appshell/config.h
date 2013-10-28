@@ -64,6 +64,7 @@
 #define REMOTE_DEBUGGING_PORT 9234
 
 // Comment out this line to enable OS themed drawing
-#define DARK_UI 
+#define DARK_UI
 #define CUSTOM_TRAFFIC_LIGHTS
 #define LIGHT_CAPTION_TEXT
+#define CUSTOM_FS_BUTTON
