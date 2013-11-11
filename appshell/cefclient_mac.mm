@@ -207,6 +207,7 @@ Class GetShellWindowFrameClass() {
   BOOL isReallyClosing;
   NSString* savedTitle;
   NSView* fullScreenButtonView;
+  NSView* trafficLightsView;
 }
 - (void)setIsReallyClosing;
 - (IBAction)handleMenuAction:(id)sender;
@@ -226,6 +227,8 @@ Class GetShellWindowFrameClass() {
   [super init];
   savedTitle = nil;
   isReallyClosing = false;
+  trafficLightsView = nil;
+  fullScreenButtonView = nil;
   return self;
 }
 
@@ -275,6 +278,12 @@ Class GetShellWindowFrameClass() {
     fullScreenButtonView = view;
 }
 
+
+- (void)setTrafficLightsView:(NSView *)view {
+    trafficLightsView = view;
+}
+
+
 - (void)addCustomDrawHook:(NSView*)contentView
 {
     NSView* themeView = [contentView superview];
@@ -304,11 +313,29 @@ Class GetShellWindowFrameClass() {
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification {
 #ifdef DARK_UI
+    
     NSWindow* window = [notification object];
     NSView* contentView = [window contentView];
+
+   
     [self removeCustomDrawHook: contentView];
+
+    
     savedTitle = [[window title] copy];
     [window setTitle:@""];
+
+    
+    [trafficLightsView setHidden:YES];
+    [fullScreenButtonView setHidden:YES];
+
+    
+#endif
+}
+
+
+- (void)windowDidEnterFullScreen:(NSNotification *)notification {
+#ifdef DARK_UI
+
 #endif
 }
 
@@ -356,6 +383,8 @@ Class GetShellWindowFrameClass() {
     NSRect  parentFrame = [themeView frame];
     NSButton *windowButton = nil;
     
+#if 0
+    
 #ifdef CUSTOM_TRAFFIC_LIGHTS
     //hide buttons
     windowButton = [theWin standardWindowButton:NSWindowCloseButton];
@@ -398,8 +427,20 @@ Class GetShellWindowFrameClass() {
         }
     }
 #endif
+
+#else 
+    
+#ifdef DARK_UI
+    [themeView setNeedsDisplay:YES];
+    [trafficLightsView setHidden:NO];
+    [fullScreenButtonView setHidden:NO];
+    [trafficLightsView display];
+    [fullScreenButtonView display];
+#endif
     
     [themeView setNeedsDisplay:YES];
+#endif
+
 }
 
 
@@ -660,6 +701,7 @@ Class GetShellWindowFrameClass() {
                                    oldFrame.size.height);                                // height
       [tvController.view setFrame:newFrame];
       [themeView addSubview:tvController.view];
+      [delegate setTrafficLightsView:tvController.view];
   }
 
 #endif 
@@ -685,6 +727,8 @@ Class GetShellWindowFrameClass() {
   // Show the window.
   [mainWnd display];
   [mainWnd makeKeyAndOrderFront: nil];
+
+  [NSApp activateWithOptions:NSApplicationActivateAllWindows];
   [NSApp requestUserAttention:NSInformationalRequest];
 }
 
