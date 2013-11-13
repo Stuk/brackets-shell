@@ -1,5 +1,5 @@
 language: cpp
 install:
-    - apt-get install --assume-yes git libnss3-1d libnspr4-0d gyp gtk+-2.0
+    - sudo apt-get install --assume-yes git libnss3-1d libnspr4-0d gyp gtk+-2.0
     - npm install -g grunt-cli
 script: grunt
